@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0a0e1a">
+<title>SpeakUp! — Aprendé Inglés</title>
+<link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoiU3BlYWtVcCEiLCJzaG9ydF9uYW1lIjoiU3BlYWtVcCIsInN0YXJ0X3VybCI6Ii4iLCJkaXNwbGF5Ijoic3RhbmRhbG9uZSIsImJhY2tncm91bmRfY29sb3IiOiIjMGEwZTFhIiwidGhlbWVfY29sb3IiOiIjZjU5ZTBiIn0=">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Fredoka:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body,#root{height:100%;width:100%}
+body{background:#0a0e1a;font-family:'Nunito','Fredoka',system-ui,sans-serif;color:#f1f5f9;overflow-x:hidden}
+input{font-family:inherit}
+button{font-family:inherit;cursor:pointer}
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:#0a0e1a}
+::-webkit-scrollbar-thumb{background:#334155;border-radius:4px}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.15)}}
+@keyframes slideDown{from{opacity:0;transform:translate(-50%,-20px)}to{opacity:1;transform:translate(-50%,0)}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.fade-in{animation:fadeIn .3s ease}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ─── STORAGE (localStorage for GitHub Pages) ───
+const STORAGE_KEY = "speakup-progress";
+const getStore = () => {
+  try { const d = localStorage.getItem(STORAGE_KEY); return d ? JSON.parse(d) : null; } catch { return null; }
+};
+const setStore = (data) => {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch(e) { console.error(e); }
+};
+
+// ─── DEFAULT PROGRESS ───
+const defaultProgress = () => ({
+  currentDay: 1, currentLevel: 0, xp: 0, streak: 0, lastActiveDate: null,
+  completedLessons: [], vocabMastered: [], grammarCompleted: [], oralScores: {},
+  badges: [], quizHistory: [], conversationHistory: [], aiChatCount: 0,
+});
+
+// ─── LEVELS & BADGES ───
+const LEVELS = [
+  { name: "Beginner", emoji: "🌱", color: "#22c55e", days: [1, 60] },
+  { name: "Elementary", emoji: "🌿", color: "#3b82f6", days: [61, 120] },
+  { name: "Pre-Intermediate", emoji: "🌳", color: "#a855f7", days: [121, 180] },
+];
+const BADGES = [
+  { id: "first_lesson", name: "First Step", emoji: "👣", desc: "Completaste tu primera lección" },
+  { id: "streak_7", name: "On Fire!", emoji: "🔥", desc: "7 días seguidos practicando" },
+  { id: "streak_30", name: "Unstoppable", emoji: "⚡", desc: "30 días seguidos" },
+  { id: "vocab_50", name: "Word Collector", emoji: "📚", desc: "50 palabras dominadas" },
+  { id: "oral_10", name: "Speaker", emoji: "🎤", desc: "10 prácticas orales completadas" },
+  { id: "level_2", name: "Level Up!", emoji: "⬆️", desc: "Alcanzaste Elementary" },
+  { id: "level_3", name: "Rising Star", emoji: "⭐", desc: "Alcanzaste Pre-Intermediate" },
+  { id: "ai_chat_5", name: "AI Friend", emoji: "🤖", desc: "5 conversaciones con el AI Tutor" },
+];
+
+// ─── FULL CURRICULUM ───
+const generateCurriculum = () => {
+  const lessons = [
+    {
+      day: 1, title: "Greetings & Introductions",
+      tip: "💡 En inglés, 'How are you?' es más un saludo que una pregunta real. La respuesta esperada es 'Fine, thanks!' no un resumen de tu vida.",
+      vocab: [
+        { en: "Hello", es: "Hola", phonetic: "/həˈloʊ/", example: "Hello! How are you?" },
+        { en: "Goodbye", es: "Adiós", phonetic: "/ɡʊdˈbaɪ/", example: "Goodbye, see you tomorrow!" },
+        { en: "Please", es: "Por favor", phonetic: "/pliːz/", example: "Please sit down." },
+        { en: "Thank you", es: "Gracias", phonetic: "/θæŋk juː/", example: "Thank you very much!" },
+        { en: "My name is...", es: "Mi nombre es...", phonetic: "/maɪ neɪm ɪz/", example: "My name is Brian." },
+        { en: "Nice to meet you", es: "Mucho gusto", phonetic: "/naɪs tə miːt juː/", example: "Nice to meet you!" },
+      ],
+      grammar: {
+        title: "El verbo TO BE (ser/estar)",
+        explanation: "Es EL verbo más importante del inglés. Funciona así:\n\n• I am (yo soy/estoy) → I'm\n• You are (vos sos/estás) → You're\n• He/She is (él/ella es/está) → He's/She's\n• We are (nosotros somos) → We're\n• They are (ellos son) → They're",
+        tip: "🎯 TRUCO: 'Am' solo va con 'I'. 'Is' va con una sola persona/cosa. 'Are' va con vos o varios.",
+        exercises: [
+          { q: "I ___ happy.", options: ["am", "is", "are"], correct: 0 },
+          { q: "She ___ a teacher.", options: ["am", "is", "are"], correct: 1 },
+          { q: "We ___ friends.", options: ["am", "is", "are"], correct: 2 },
+          { q: "You ___ from Argentina.", options: ["am", "is", "are"], correct: 2 },
+        ]
+      },
+      oral: { phrases: [
+        { text: "Hello, my name is Brian", translation: "Hola, mi nombre es Brian" },
+        { text: "Nice to meet you", translation: "Mucho gusto" },
+        { text: "How are you today?", translation: "¿Cómo estás hoy?" },
+        { text: "I am fine, thank you", translation: "Estoy bien, gracias" },
+      ]},
+      reading: {
+        text: "Hello! My name is Brian. I am from Argentina. I am happy to learn English. Nice to meet you!",
+        questions: [
+          { q: "Where is Brian from?", options: ["Brazil", "Argentina", "Chile"], correct: 1 },
+          { q: "What is he learning?", options: ["Spanish", "French", "English"], correct: 2 },
+        ]
+      }
+    },
+    {
+      day: 2, title: "Numbers & Age",
+      tip: "💡 Los números del 13 al 19 terminan en '-teen' (thirteen, fourteen...). Los del 20, 30, 40... terminan en '-ty' (twenty, thirty...). ¡No los confundas!",
+      vocab: [
+        { en: "One", es: "Uno", phonetic: "/wʌn/", example: "I have one brother." },
+        { en: "Ten", es: "Diez", phonetic: "/tɛn/", example: "Ten minutes, please." },
+        { en: "Twenty", es: "Veinte", phonetic: "/ˈtwɛnti/", example: "I am twenty years old." },
+        { en: "Hundred", es: "Cien", phonetic: "/ˈhʌndrɪd/", example: "One hundred percent!" },
+        { en: "How old are you?", es: "¿Cuántos años tenés?", phonetic: "/haʊ oʊld ɑːr juː/", example: "How old are you?" },
+        { en: "Year", es: "Año", phonetic: "/jɪr/", example: "I am 30 years old." },
+      ],
+      grammar: {
+        title: "Números y edad con TO BE",
+        explanation: "En inglés la edad se dice con TO BE, no con 'tener':\n\n• I am 30 years old (Tengo 30 años)\n• She is 25 (Ella tiene 25)\n• How old are you? (¿Cuántos años tenés?)\n\n⚠️ NO digas 'I have 30 years' — eso es spanglish!",
+        tip: "🎯 TRUCO: En inglés vos 'SOS' una edad, no la 'TENÉS'. Pensalo como 'Soy de 30 años'.",
+        exercises: [
+          { q: "I ___ 30 years old.", options: ["have", "am", "do"], correct: 1 },
+          { q: "How old ___ your sister?", options: ["is", "has", "does"], correct: 0 },
+          { q: "___ are you? — I'm 25.", options: ["How much", "How old", "How many"], correct: 1 },
+          { q: "She ___ twenty years old.", options: ["have", "has", "is"], correct: 2 },
+        ]
+      },
+      oral: { phrases: [
+        { text: "I am thirty years old", translation: "Tengo treinta años" },
+        { text: "How old are you?", translation: "¿Cuántos años tenés?" },
+        { text: "My phone number is five, five, three", translation: "Mi número es cinco, cinco, tres" },
+        { text: "There are twenty people here", translation: "Hay veinte personas aquí" },
+      ]},
+      reading: {
+        text: "My name is Carlos. I am 35 years old. My sister is 28. My father is 60 years old. We are a happy family.",
+        questions: [
+          { q: "How old is Carlos?", options: ["28", "35", "60"], correct: 1 },
+          { q: "How old is his father?", options: ["35", "28", "60"], correct: 2 },
+        ]
+      }
+    },
+    {
+      day: 3, title: "Family & People",
+      tip: "💡 'Brother' y 'sister' no tienen género ambiguo. Si querés decir 'hermanos' (mixto), decí 'siblings'. Para 'padres' = 'parents'.",
+      vocab: [
+        { en: "Mother / Mom", es: "Madre / Mamá", phonetic: "/ˈmʌðər/", example: "My mom is amazing." },
+        { en: "Father / Dad", es: "Padre / Papá", phonetic: "/ˈfɑːðər/", example: "My dad works hard." },
+        { en: "Brother", es: "Hermano", phonetic: "/ˈbrʌðər/", example: "I have one brother." },
+        { en: "Sister", es: "Hermana", phonetic: "/ˈsɪstər/", example: "My sister lives in Córdoba." },
+        { en: "Family", es: "Familia", phonetic: "/ˈfæməli/", example: "I love my family." },
+        { en: "Friend", es: "Amigo/a", phonetic: "/frɛnd/", example: "She is my best friend." },
+      ],
+      grammar: {
+        title: "Possessive Adjectives (mi, tu, su...)",
+        explanation: "Los posesivos en inglés son más simples que en español:\n\n• My = mi/mis\n• Your = tu/tus\n• His = de él\n• Her = de ella\n• Our = nuestro/a\n• Their = de ellos",
+        tip: "🎯 TRUCO: 'His' = hombre, 'Her' = mujer. En español 'su' sirve para todo, en inglés elegís según el DUEÑO.",
+        exercises: [
+          { q: "___ name is Brian. (yo)", options: ["My", "His", "Your"], correct: 0 },
+          { q: "She loves ___ family.", options: ["his", "her", "your"], correct: 1 },
+          { q: "We love ___ country.", options: ["their", "your", "our"], correct: 2 },
+          { q: "He has ___ car.", options: ["her", "his", "my"], correct: 1 },
+        ]
+      },
+      oral: { phrases: [
+        { text: "This is my family", translation: "Esta es mi familia" },
+        { text: "My brother is very tall", translation: "Mi hermano es muy alto" },
+        { text: "Her name is Maria", translation: "Su nombre es María" },
+        { text: "Our parents are great", translation: "Nuestros padres son geniales" },
+      ]},
+      reading: {
+        text: "This is my family. My mother's name is Ana. My father is Pedro. I have two brothers. Their names are Luis and Marco. We live in Buenos Aires.",
+        questions: [
+          { q: "How many brothers?", options: ["One", "Two", "Three"], correct: 1 },
+          { q: "Where do they live?", options: ["Córdoba", "Rosario", "Buenos Aires"], correct: 2 },
+        ]
+      }
+    },
+    {
+      day: 4, title: "Daily Routines",
+      tip: "💡 'Does' va SOLO con he/she/it. Cuando usás 'does', el verbo principal pierde la 's': Does she work? (NO: Does she works?)",
+      vocab: [
+        { en: "Wake up", es: "Despertarse", phonetic: "/weɪk ʌp/", example: "I wake up at 7 AM." },
+        { en: "Breakfast", es: "Desayuno", phonetic: "/ˈbrɛkfəst/", example: "I have breakfast at 8." },
+        { en: "Work", es: "Trabajar", phonetic: "/wɜːrk/", example: "I work from 9 to 6." },
+        { en: "Lunch", es: "Almuerzo", phonetic: "/lʌntʃ/", example: "Lunch is at noon." },
+        { en: "Dinner", es: "Cena", phonetic: "/ˈdɪnər/", example: "We have dinner at 9 PM." },
+        { en: "Sleep", es: "Dormir", phonetic: "/sliːp/", example: "I sleep 8 hours." },
+      ],
+      grammar: {
+        title: "Present Simple — Rutinas",
+        explanation: "Usamos Present Simple para rutinas:\n\n• I work every day\n• She works at 9 (con he/she/it → +s)\n• We eat lunch at noon\n\n⚠️ Con he/she/it: work→works, eat→eats, go→goes",
+        tip: "🎯 TRUCO: He/she/it lleva 'S'. Pensá: 'He drinkS, she eatS, it rainS'.",
+        exercises: [
+          { q: "I ___ at 7 AM every day.", options: ["wake up", "wakes up", "waking up"], correct: 0 },
+          { q: "She ___ coffee in the morning.", options: ["drink", "drinks", "drinking"], correct: 1 },
+          { q: "We ___ lunch at noon.", options: ["has", "have", "having"], correct: 1 },
+          { q: "He ___ to the office by bus.", options: ["go", "goes", "going"], correct: 1 },
+        ]
+      },
+      oral: { phrases: [
+        { text: "I wake up at seven in the morning", translation: "Me despierto a las siete" },
+        { text: "She has breakfast at eight", translation: "Ella desayuna a las ocho" },
+        { text: "We work from nine to six", translation: "Trabajamos de nueve a seis" },
+        { text: "I go to sleep at eleven", translation: "Me duermo a las once" },
+      ]},
+      reading: {
+        text: "Every day I wake up at 7 AM. I have breakfast and go to work. I work from 9 to 6. After work, I study English for 30 minutes. I have dinner at 9 PM and go to sleep at 11.",
+        questions: [
+          { q: "What time does the person wake up?", options: ["6 AM", "7 AM", "8 AM"], correct: 1 },
+          { q: "How long does the person study English?", options: ["20 min", "30 min", "1 hour"], correct: 1 },
+        ]
+      }
+    },
+    {
+      day: 5, title: "Food & Drinks",
+      tip: "💡 'Some' → afirmativo: 'I want some water'. 'Any' → preguntas/negativo: 'Do you have any milk?'",
+      vocab: [
+        { en: "Water", es: "Agua", phonetic: "/ˈwɔːtər/", example: "Can I have some water?" },
+        { en: "Coffee", es: "Café", phonetic: "/ˈkɔːfi/", example: "I drink coffee every morning." },
+        { en: "Meat", es: "Carne", phonetic: "/miːt/", example: "I like meat." },
+        { en: "Rice", es: "Arroz", phonetic: "/raɪs/", example: "Rice and chicken, please." },
+        { en: "Hungry", es: "Hambriento", phonetic: "/ˈhʌŋɡri/", example: "I am hungry." },
+        { en: "Delicious", es: "Delicioso", phonetic: "/dɪˈlɪʃəs/", example: "This is delicious!" },
+      ],
+      grammar: {
+        title: "Countable vs Uncountable",
+        explanation: "Contables: apple, egg → a/an, two, three\nIncontables: water, rice, coffee → some\n\n⚠️ No decir 'a water' o 'two rices'",
+        tip: "🎯 TRUCO: Si NO podés contar uno por uno, es incontable → usá 'some'.",
+        exercises: [
+          { q: "I want ___ apple.", options: ["a", "some", "any"], correct: 0 },
+          { q: "Can I have ___ water?", options: ["a", "an", "some"], correct: 2 },
+          { q: "I don't have ___ sugar.", options: ["some", "any", "a"], correct: 1 },
+          { q: "There are two ___ on the table.", options: ["breads", "eggs", "rices"], correct: 1 },
+        ]
+      },
+      oral: { phrases: [
+        { text: "I am hungry, let's eat!", translation: "Tengo hambre, ¡vamos a comer!" },
+        { text: "Can I have some water please?", translation: "¿Puedo tener agua por favor?" },
+        { text: "This coffee is delicious", translation: "Este café es delicioso" },
+        { text: "I like rice and meat", translation: "Me gusta el arroz y la carne" },
+      ]},
+      reading: {
+        text: "For breakfast I have coffee and bread. For lunch I eat rice and meat. I drink water every day. My favorite food is pizza. It is delicious!",
+        questions: [
+          { q: "What does the person drink for breakfast?", options: ["Tea", "Juice", "Coffee"], correct: 2 },
+          { q: "Favorite food?", options: ["Pasta", "Pizza", "Rice"], correct: 1 },
+        ]
+      }
+    },
+    {
+      day: 6, title: "Colors & Clothes",
+      tip: "💡 En inglés los colores van ANTES del sustantivo: 'a red car' (un auto rojo), no 'a car red'.",
+      vocab: [
+        { en: "Red", es: "Rojo", phonetic: "/rɛd/", example: "I have a red shirt." },
+        { en: "Blue", es: "Azul", phonetic: "/bluː/", example: "The sky is blue." },
+        { en: "Black", es: "Negro", phonetic: "/blæk/", example: "Black shoes are elegant." },
+        { en: "White", es: "Blanco", phonetic: "/waɪt/", example: "A white t-shirt." },
+        { en: "Shirt", es: "Camisa", phonetic: "/ʃɜːrt/", example: "I wear a shirt to work." },
+        { en: "Shoes", es: "Zapatos", phonetic: "/ʃuːz/", example: "New shoes are expensive." },
+      ],
+      grammar: {
+        title: "Adjectives Before Nouns",
+        explanation: "En inglés el adjetivo SIEMPRE va antes del sustantivo:\n\n• A big house (una casa grande)\n• A beautiful day (un día hermoso)\n• An old car (un auto viejo)\n\nOrden: opinión + tamaño + color + material + sustantivo\n'A beautiful big red leather bag'",
+        tip: "🎯 TRUCO: En español decís 'auto rojo'. En inglés es al revés: 'red car'. El adjetivo PRIMERO, siempre.",
+        exercises: [
+          { q: "I have a ___ car.", options: ["car blue", "blue car", "blue"], correct: 1 },
+          { q: "She wears ___ shoes.", options: ["shoes black", "black shoes", "black"], correct: 1 },
+          { q: "It's a ___ day.", options: ["beautiful", "day beautiful", "beautiful day"], correct: 2 },
+          { q: "He has a ___ shirt.", options: ["white new", "new white", "shirt white new"], correct: 1 },
+        ]
+      },
+      oral: { phrases: [
+        { text: "I like your blue shirt", translation: "Me gusta tu camisa azul" },
+        { text: "These black shoes are new", translation: "Estos zapatos negros son nuevos" },
+        { text: "My favorite color is green", translation: "Mi color favorito es el verde" },
+        { text: "She is wearing a red dress", translation: "Ella lleva un vestido rojo" },
+      ]},
+      reading: {
+        text: "Today I am wearing a blue shirt and black pants. My shoes are white. My friend Carlos is wearing a red jacket. He likes bright colors. I prefer dark colors like black and blue.",
+        questions: [
+          { q: "What color is the person's shirt?", options: ["Red", "Blue", "White"], correct: 1 },
+          { q: "What does Carlos like?", options: ["Dark colors", "Bright colors", "White"], correct: 1 },
+        ]
+      }
+    },
+    {
+      day: 7, title: "Weather & Seasons",
+      tip: "💡 Para hablar del clima usamos 'It is' + adjetivo: 'It is hot', 'It is cold'. 'It' no se refiere a nada en particular, es como el sujeto 'se' en español.",
+      vocab: [
+        { en: "Hot", es: "Caluroso", phonetic: "/hɑːt/", example: "It is very hot today." },
+        { en: "Cold", es: "Frío", phonetic: "/koʊld/", example: "It is cold in winter." },
+        { en: "Rain", es: "Lluvia/Llover", phonetic: "/reɪn/", example: "It is going to rain." },
+        { en: "Sun", es: "Sol", phonetic: "/sʌn/", example: "The sun is shining." },
+        { en: "Summer", es: "Verano", phonetic: "/ˈsʌmər/", example: "I love summer!" },
+        { en: "Winter", es: "Invierno", phonetic: "/ˈwɪntər/", example: "Winter is cold here." },
+      ],
+      grammar: {
+        title: "Talking About Weather",
+        explanation: "El clima se describe con 'It':\n\n• It is sunny (Está soleado)\n• It is raining (Está lloviendo)\n• It is going to rain (Va a llover)\n• It was cold yesterday (Estuvo frío ayer)\n\nLas estaciones: spring, summer, fall/autumn, winter",
+        tip: "🎯 TRUCO: 'It's raining' = está lloviendo ahora. 'It rains a lot' = llueve mucho en general.",
+        exercises: [
+          { q: "It ___ very hot today.", options: ["is", "are", "am"], correct: 0 },
+          { q: "It ___ raining outside.", options: ["are", "is", "am"], correct: 1 },
+          { q: "In Buenos Aires, ___ is hot.", options: ["winter", "summer", "spring"], correct: 1 },
+          { q: "___ is cold in Argentina.", options: ["Summer", "Fall", "Winter"], correct: 2 },
+        ]
+      },
+      oral: { phrases: [
+        { text: "It is very hot today", translation: "Hace mucho calor hoy" },
+        { text: "Is it going to rain tomorrow?", translation: "¿Va a llover mañana?" },
+        { text: "I love summer in Argentina", translation: "Amo el verano en Argentina" },
+        { text: "It is cold and windy today", translation: "Hoy está frío y ventoso" },
+      ]},
+      reading: {
+        text: "In Buenos Aires, summer is from December to March. It is very hot. Winter is from June to September. It is cold but not too much. Spring is my favorite season because the weather is perfect.",
+        questions: [
+          { q: "When is summer in Buenos Aires?", options: ["June-September", "December-March", "March-June"], correct: 1 },
+          { q: "What is the person's favorite season?", options: ["Summer", "Winter", "Spring"], correct: 2 },
+        ]
+      }
+    },
+    {
+      day: 8, title: "House & Rooms",
+      tip: "💡 'There is' (hay - singular) y 'There are' (hay - plural). 'There is a table' vs 'There are two chairs'.",
+      vocab: [
+        { en: "Kitchen", es: "Cocina", phonetic: "/ˈkɪtʃɪn/", example: "I cook in the kitchen." },
+        { en: "Bedroom", es: "Dormitorio", phonetic: "/ˈbɛdruːm/", example: "My bedroom is big." },
+        { en: "Bathroom", es: "Baño", phonetic: "/ˈbæθruːm/", example: "The bathroom is clean." },
+        { en: "Living room", es: "Living/Sala", phonetic: "/ˈlɪvɪŋ ruːm/", example: "We watch TV in the living room." },
+        { en: "Door", es: "Puerta", phonetic: "/dɔːr/", example: "Please close the door." },
+        { en: "Window", es: "Ventana", phonetic: "/ˈwɪndoʊ/", example: "Open the window, please." },
+      ],
+      grammar: {
+        title: "There is / There are",
+        explanation: "Usamos 'there is/are' para decir que algo existe:\n\n• There is a bed in my room (Hay una cama)\n• There are three chairs (Hay tres sillas)\n• Is there a bathroom? (¿Hay baño?)\n• There isn't a garden (No hay jardín)",
+        tip: "🎯 TRUCO: 'There is' = UNA cosa. 'There are' = VARIAS cosas. Mirá lo que sigue: ¿singular o plural?",
+        exercises: [
+          { q: "There ___ a kitchen in my house.", options: ["is", "are", "be"], correct: 0 },
+          { q: "There ___ three bedrooms.", options: ["is", "are", "be"], correct: 1 },
+          { q: "___ there a bathroom?", options: ["Is", "Are", "Do"], correct: 0 },
+          { q: "There ___ two windows.", options: ["is", "are", "isn't"], correct: 1 },
+        ]
+      },
+      oral: { phrases: [
+        { text: "There are three bedrooms in my house", translation: "Hay tres dormitorios en mi casa" },
+        { text: "The kitchen is very small", translation: "La cocina es muy chica" },
+        { text: "Is there a bathroom on this floor?", translation: "¿Hay un baño en este piso?" },
+        { text: "I like my living room", translation: "Me gusta mi living" },
+      ]},
+      reading: {
+        text: "My house has two bedrooms, a kitchen, a bathroom, and a living room. There is a big window in the living room. There are two doors. The kitchen is small but I like it. My favorite room is my bedroom.",
+        questions: [
+          { q: "How many bedrooms?", options: ["One", "Two", "Three"], correct: 1 },
+          { q: "What is the person's favorite room?", options: ["Kitchen", "Living room", "Bedroom"], correct: 2 },
+        ]
+      }
+    },
+    {
+      day: 9, title: "Time & Clock",
+      tip: "💡 En inglés se usa el reloj de 12 horas con AM/PM. 'It's 3 PM' = Son las 15:00. Para la hora en punto: 'o'clock' (3 o'clock).",
+      vocab: [
+        { en: "O'clock", es: "En punto", phonetic: "/əˈklɑːk/", example: "It is 3 o'clock." },
+        { en: "Half past", es: "Y media", phonetic: "/hæf pæst/", example: "It is half past two." },
+        { en: "Quarter", es: "Cuarto", phonetic: "/ˈkwɔːrtər/", example: "Quarter past ten." },
+        { en: "Morning", es: "Mañana", phonetic: "/ˈmɔːrnɪŋ/", example: "Good morning!" },
+        { en: "Afternoon", es: "Tarde", phonetic: "/ˌæftərˈnuːn/", example: "Good afternoon." },
+        { en: "Night", es: "Noche", phonetic: "/naɪt/", example: "Good night!" },
+      ],
+      grammar: {
+        title: "Telling Time",
+        explanation: "Formas de decir la hora:\n\n• 3:00 → It's three o'clock\n• 3:15 → It's quarter past three\n• 3:30 → It's half past three\n• 3:45 → It's quarter to four\n• 3:10 → It's ten past three\n• 3:50 → It's ten to four",
+        tip: "🎯 TRUCO: 'Past' = pasaron minutos después de la hora. 'To' = faltan minutos para la próxima hora.",
+        exercises: [
+          { q: "3:00 → It's three ___", options: ["o'clock", "past", "to"], correct: 0 },
+          { q: "3:30 → It's ___ past three", options: ["quarter", "half", "ten"], correct: 1 },
+          { q: "3:15 → It's ___ past three", options: ["half", "quarter", "twenty"], correct: 1 },
+          { q: "3:45 → It's quarter ___ four", options: ["past", "to", "at"], correct: 1 },
+        ]
+      },
+      oral: { phrases: [
+        { text: "What time is it?", translation: "¿Qué hora es?" },
+        { text: "It is half past nine", translation: "Son las nueve y media" },
+        { text: "The meeting is at ten o'clock", translation: "La reunión es a las diez en punto" },
+        { text: "I wake up at quarter past seven", translation: "Me despierto a las siete y cuarto" },
+      ]},
+      reading: {
+        text: "My day starts at 7 o'clock in the morning. At half past seven I have breakfast. I go to work at quarter to nine. I have lunch at noon. I finish work at 6 o'clock. I study English at half past eight in the evening.",
+        questions: [
+          { q: "When does the person have breakfast?", options: ["7:00", "7:30", "8:00"], correct: 1 },
+          { q: "When does the person study English?", options: ["6:00", "7:30", "8:30"], correct: 2 },
+        ]
+      }
+    },
+    {
+      day: 10, title: "Review — Week 1 & 2",
+      tip: "💡 ¡Repaso! Lo más importante hasta ahora: TO BE, Present Simple, posesivos, there is/are, y la hora. Si dominás esto, tenés la base del inglés.",
+      vocab: [
+        { en: "Remember", es: "Recordar", phonetic: "/rɪˈmɛmbər/", example: "Remember to study!" },
+        { en: "Practice", es: "Practicar", phonetic: "/ˈpræktɪs/", example: "Practice makes perfect." },
+        { en: "Learn", es: "Aprender", phonetic: "/lɜːrn/", example: "I want to learn English." },
+        { en: "Understand", es: "Entender", phonetic: "/ˌʌndərˈstænd/", example: "I understand now!" },
+        { en: "Repeat", es: "Repetir", phonetic: "/rɪˈpiːt/", example: "Can you repeat that?" },
+        { en: "Try", es: "Intentar", phonetic: "/traɪ/", example: "Try again!" },
+      ],
+      grammar: {
+        title: "Mega Review: Días 1-9",
+        explanation: "Repasemos todo:\n\n1. TO BE: I am, you are, he/she is\n2. Posesivos: my, your, his, her, our, their\n3. Present Simple: I work, she works (+s)\n4. There is/are: There is a dog, There are cats\n5. Some/Any: some (afirmativo), any (pregunta/negativo)\n6. Hora: o'clock, half past, quarter past/to",
+        tip: "🎯 Si podés armar frases con todo esto, ya tenés las bases. ¡Usá el AI Tutor para un repaso personalizado!",
+        exercises: [
+          { q: "She ___ from Argentina.", options: ["am", "is", "are"], correct: 1 },
+          { q: "There ___ many people here.", options: ["is", "are", "be"], correct: 1 },
+          { q: "He ___ coffee every morning.", options: ["drink", "drinks", "drinking"], correct: 1 },
+          { q: "It's 8:30 → It's ___ past eight.", options: ["quarter", "half", "ten"], correct: 1 },
+        ]
+      },
+      oral: { phrases: [
+        { text: "I am from Argentina and I am learning English", translation: "Soy de Argentina y estoy aprendiendo inglés" },
+        { text: "My family has three people", translation: "Mi familia tiene tres personas" },
+        { text: "I wake up at seven and go to work", translation: "Me despierto a las siete y voy a trabajar" },
+        { text: "There are two bedrooms in my house", translation: "Hay dos dormitorios en mi casa" },
+      ]},
+      reading: {
+        text: "Hi! My name is Brian. I am from Buenos Aires, Argentina. I am learning English. I wake up at 7 in the morning. I have breakfast and go to work. There are many people in my office. My favorite color is blue. Today it is very hot. It is summer in Argentina!",
+        questions: [
+          { q: "Where is Brian from?", options: ["Chile", "Buenos Aires", "Córdoba"], correct: 1 },
+          { q: "What is the weather like?", options: ["Cold", "Very hot", "Rainy"], correct: 1 },
+        ]
+      }
+    },
+  ];
+
+  // Generate remaining days 11-30 with AI-tutor-supported content
+  const moreTopics = [
+    [11,"Jobs & Professions","💡 En inglés muchas profesiones terminan en '-er' (teacher, driver, worker) o '-or' (doctor, actor). '-ist' para especialistas (dentist, artist)."],
+    [12,"City & Directions","💡 'Turn left/right', 'Go straight', 'It's next to/in front of/behind'. Esos son los básicos para moverse."],
+    [13,"Shopping & Money","💡 'How much is this?' para preguntar precio. 'It costs...' para responder. 'Expensive' = caro, 'Cheap' = barato."],
+    [14,"WH Questions","💡 What=qué, Where=dónde, When=cuándo, Who=quién, Why=por qué, How=cómo. Son las llaves para hacer CUALQUIER pregunta."],
+    [15,"Can / Can't — Abilities","💡 'Can' no cambia: I can, she can, they can. NUNCA 'she cans'. Negativo: can't (cannot). Pregunta: Can you...?"],
+    [16,"Likes & Dislikes","💡 'I like + -ing': I like swimming. 'I don't like' + -ing: I don't like running. 'Do you like...?' para preguntar."],
+    [17,"Present Continuous","💡 Ahora mismo: I am eating (estoy comiendo). Estructura: sujeto + am/is/are + verbo-ing."],
+    [18,"Days & Months","💡 En inglés los días y meses van con MAYÚSCULA: Monday, January. Nunca en minúscula como en español."],
+    [19,"Adjectives — Describing","💡 Adjetivos comunes: big/small, old/new, good/bad, hot/cold, fast/slow, happy/sad, easy/hard."],
+    [20,"Review — Week 3 & 4","💡 ¡Repaso de mitad de mes! Si llegaste hasta acá, ya podés armar oraciones básicas en inglés. ¡Seguí así!"],
+    [21,"There is / There are — Advanced","💡 Negativo: There isn't / There aren't. Pregunta: Is there? / Are there? 'How many... are there?'"],
+    [22,"Prepositions of Place","💡 In (dentro), on (sobre), under (debajo), next to (al lado de), between (entre), behind (detrás), in front of (enfrente)."],
+    [23,"Transport & Travel","💡 'By bus/train/car/plane' para decir cómo viajás. 'I go to work by bus.' NO 'in bus'."],
+    [24,"Health & Body","💡 'I have a headache' (dolor de cabeza), 'My back hurts' (me duele la espalda). Body = cuerpo, Head, Arms, Legs."],
+    [25,"Comparatives","💡 Cortos: bigger, faster, older (+ -er). Largos: more expensive, more beautiful (more +...). Irregular: good→better, bad→worse."],
+    [26,"Superlatives","💡 Cortos: the biggest, the fastest (the + -est). Largos: the most expensive (the most +...). Irregular: the best, the worst."],
+    [27,"Past Simple — Regular","💡 Pasado regular: verbo + -ed. Worked, played, studied. Pronunciación: /t/, /d/, o /ɪd/ según el final del verbo."],
+    [28,"Past Simple — Irregular","💡 Los irregulares hay que memorizar: go→went, eat→ate, see→saw, have→had, do→did, say→said, come→came."],
+    [29,"Past Simple — Questions","💡 Para preguntar en pasado: Did + sujeto + verbo base. 'Did you eat?' (NO: Did you ate?). Negativo: didn't + verbo base."],
+    [30,"Review — Month 1 Complete!","💡 ¡UN MES COMPLETO! Ya sabés: Present Simple, Present Continuous, Past Simple, Can, comparatives. ¡Sos crack!"],
+  ];
+
+  moreTopics.forEach(([day, title, tip]) => {
+    lessons.push({
+      day, title, tip,
+      vocab: [
+        { en: `${title} - Word 1`, es: "Usá AI Tutor", phonetic: "/-/", example: "Practice with AI Tutor for full vocabulary!" },
+        { en: `${title} - Word 2`, es: "Usá AI Tutor", phonetic: "/-/", example: "The AI Tutor generates personalized vocab!" },
+      ],
+      grammar: {
+        title: title,
+        explanation: `Tema del día ${day}: ${title}\n\n🤖 Para una explicación completa y personalizada, usá el AI Tutor. Te va a explicar con ejemplos y en español.`,
+        tip: "🎯 Tocá '🤖 AI Tutor' → 'Explicar gramática' para una clase completa de este tema.",
+        exercises: [{ q: `Practice ${title} with the AI Tutor for interactive exercises!`, options: ["Go to AI Tutor", "Skip", "Review later"], correct: 0 }]
+      },
+      oral: { phrases: [{ text: `Practice ${title} phrases with AI Tutor`, translation: "Practicá con el AI Tutor para frases personalizadas" }] },
+      reading: { text: `Day ${day}: ${title}. For a complete reading exercise, use the AI Tutor! It will create a custom text at your level.`, questions: [] }
+    });
+  });
+
+  return lessons.sort((a, b) => a.day - b.day);
+};
+const CURRICULUM = generateCurriculum();
+
+// ─── SPEECH HELPER ───
+const speak = (text, rate = 0.85) => {
+  if (!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = "en-US"; u.rate = rate; u.pitch = 1;
+  const voices = window.speechSynthesis.getVoices();
+  const v = voices.find(v => v.lang.startsWith("en") && v.name.includes("Google")) || voices.find(v => v.lang.startsWith("en"));
+  if (v) u.voice = v;
+  window.speechSynthesis.speak(u);
+};
+
+// ─── SVG ICONS ───
+const Icon = ({type, size=20}) => {
+  const s = {width:size,height:size,display:"inline-block",verticalAlign:"middle"};
+  const I = {
+    mic: React.createElement("svg",{style:s,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:"2"},React.createElement("path",{d:"M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"}),React.createElement("path",{d:"M19 10v2a7 7 0 01-14 0v-2"}),React.createElement("line",{x1:"12",y1:"19",x2:"12",y2:"23"}),React.createElement("line",{x1:"8",y1:"23",x2:"16",y2:"23"})),
+    volume: React.createElement("svg",{style:s,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:"2"},React.createElement("polygon",{points:"11 5 6 9 2 9 2 15 6 15 11 19 11 5"}),React.createElement("path",{d:"M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"})),
+    back: React.createElement("svg",{style:s,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:"2"},React.createElement("polyline",{points:"15 18 9 12 15 6"})),
+  };
+  return I[type] || null;
+};
+
+// ═══════════════ MAIN APP ═══════════════
+function App() {
+  const [progress, setProgress] = useState(null);
+  const [screen, setScreen] = useState("home");
+  const [activeLesson, setActiveLesson] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [notif, setNotif] = useState(null);
+
+  useEffect(() => {
+    const saved = getStore();
+    if (saved) {
+      const today = new Date().toDateString();
+      if (saved.lastActiveDate) {
+        const diff = Math.floor((new Date(today) - new Date(saved.lastActiveDate)) / 86400000);
+        if (diff > 1) saved.streak = 0;
+      }
+      saved.lastActiveDate = today;
+      setProgress(saved); setStore(saved);
+    } else {
+      const init = defaultProgress(); init.lastActiveDate = new Date().toDateString();
+      setProgress(init); setStore(init);
+    }
+    setLoading(false);
+    window.speechSynthesis && window.speechSynthesis.getVoices();
+  }, []);
+
+  useEffect(() => { if (progress) setStore(progress); }, [progress]);
+
+  const showNotif = (m) => { setNotif(m); setTimeout(() => setNotif(null), 2500); };
+  const addXP = (n) => { setProgress(p => ({...p, xp: p.xp + n})); showNotif(`+${n} XP ⚡`); };
+
+  const completeLesson = (day) => {
+    setProgress(p => {
+      const c = p.completedLessons.includes(day) ? p.completedLessons : [...p.completedLessons, day];
+      const nd = Math.max(p.currentDay, day + 1);
+      const st = p.streak + (p.completedLessons.includes(day) ? 0 : 1);
+      let b = [...p.badges];
+      if (c.length === 1 && !b.includes("first_lesson")) b.push("first_lesson");
+      if (st >= 7 && !b.includes("streak_7")) b.push("streak_7");
+      if (st >= 30 && !b.includes("streak_30")) b.push("streak_30");
+      if (nd > 60 && !b.includes("level_2")) b.push("level_2");
+      if (nd > 120 && !b.includes("level_3")) b.push("level_3");
+      return {...p, completedLessons:c, currentDay:nd, streak:st, badges:b, currentLevel: nd>120?2:nd>60?1:0, lastActiveDate: new Date().toDateString()};
+    });
+  };
+
+  const openLesson = (day) => {
+    const l = CURRICULUM.find(x => x.day === day);
+    if (l) { setActiveLesson(l); setScreen("lesson"); }
+    else showNotif("Usá el AI Tutor para este día");
+  };
+
+  if (loading) return React.createElement("div",{style:{...S.app,display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh"}},
+    React.createElement("div",{style:{textAlign:"center"}},
+      React.createElement("div",{style:{fontSize:60,marginBottom:16,animation:"pulse 1.5s infinite"}},"🗣️"),
+      React.createElement("h1",{style:{fontFamily:"'Fredoka',sans-serif",color:"#f59e0b",fontSize:28}},"SpeakUp!"),
+      React.createElement("p",{style:{color:"#94a3b8",marginTop:8}},"Cargando...")
+    )
+  );
+  if (!progress) return null;
+  const cl = LEVELS[progress.currentLevel];
+
+  return React.createElement("div",{style:S.app},
+    notif && React.createElement("div",{style:S.toast},notif),
+    screen==="home" && React.createElement(HomeScreen,{progress,currentLevel:cl,openLesson,setScreen}),
+    screen==="lesson" && activeLesson && React.createElement(LessonHub,{lesson:activeLesson,progress,setScreen}),
+    screen==="vocab" && activeLesson && React.createElement(VocabScreen,{lesson:activeLesson,addXP,goBack:()=>setScreen("lesson"),progress,setProgress}),
+    screen==="grammar" && activeLesson && React.createElement(GrammarScreen,{lesson:activeLesson,addXP,goBack:()=>setScreen("lesson"),completeLesson:()=>completeLesson(activeLesson.day)}),
+    screen==="oral" && activeLesson && React.createElement(OralScreen,{lesson:activeLesson,addXP,goBack:()=>setScreen("lesson"),progress,setProgress}),
+    screen==="reading" && activeLesson && React.createElement(ReadingScreen,{lesson:activeLesson,addXP,goBack:()=>setScreen("lesson")}),
+    screen==="ai" && React.createElement(AITutor,{goBack:()=>activeLesson?setScreen("lesson"):setScreen("home"),progress,setProgress,addXP,ctx:activeLesson}),
+    screen==="badges" && React.createElement(BadgesScreen,{progress,goBack:()=>setScreen("home")}),
+    screen==="daymap" && React.createElement(DayMap,{progress,openLesson,goBack:()=>setScreen("home")})
+  );
+}
+
+// ═══ HOME ═══
+function HomeScreen({progress:p, currentLevel:cl, openLesson, setScreen}) {
+  const pct = Math.min(100, Math.round((p.currentDay/180)*100));
+  const today = CURRICULUM.find(l=>l.day===p.currentDay) || CURRICULUM[CURRICULUM.length-1];
+  return React.createElement("div",{style:S.screen},
+    React.createElement("div",{style:S.homeHeader},
+      React.createElement("div",null,
+        React.createElement("h1",{style:S.logo},"🗣️ SpeakUp!"),
+        React.createElement("p",{style:S.subtitle},"Tu camino al inglés · Día "+p.currentDay+"/180")
+      ),
+      React.createElement("div",{style:S.streakBadge},"🔥 "+p.streak)
+    ),
+    React.createElement("div",{style:S.levelCard},
+      React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}},
+        React.createElement("span",{style:{fontSize:16,fontWeight:700,color:cl.color}},cl.emoji+" "+cl.name),
+        React.createElement("span",{style:{fontSize:14,color:"#94a3b8"}},p.xp+" XP ⚡")
+      ),
+      React.createElement("div",{style:S.progressBarBg},
+        React.createElement("div",{style:{...S.progressBarFill,width:pct+"%",background:"linear-gradient(90deg,"+cl.color+",#f59e0b)"}})
+      ),
+      React.createElement("p",{style:{fontSize:12,color:"#64748b",marginTop:6}},pct+"% completado")
+    ),
+    React.createElement("button",{style:S.todayCTA,onClick:()=>openLesson(today.day)},
+      React.createElement("div",{style:{fontSize:32,marginBottom:8}},"📖"),
+      React.createElement("div",{style:{fontWeight:700,fontSize:18,marginBottom:4}},"Día "+today.day+": "+today.title),
+      React.createElement("div",{style:{fontSize:13,opacity:.8}},"Toca para empezar →")
+    ),
+    React.createElement("div",{style:S.quickGrid},
+      React.createElement("button",{style:{...S.quickBtn,background:"linear-gradient(135deg,#7c3aed,#a855f7)"},onClick:()=>setScreen("ai")},React.createElement("span",{style:{fontSize:24}},"🤖"),React.createElement("span",{style:{fontSize:13,fontWeight:600}},"AI Tutor")),
+      React.createElement("button",{style:{...S.quickBtn,background:"linear-gradient(135deg,#059669,#34d399)"},onClick:()=>setScreen("daymap")},React.createElement("span",{style:{fontSize:24}},"🗺️"),React.createElement("span",{style:{fontSize:13,fontWeight:600}},"Mapa")),
+      React.createElement("button",{style:{...S.quickBtn,background:"linear-gradient(135deg,#d97706,#fbbf24)"},onClick:()=>setScreen("badges")},React.createElement("span",{style:{fontSize:24}},"🏆"),React.createElement("span",{style:{fontSize:13,fontWeight:600}},"Logros"))
+    ),
+    React.createElement("div",{style:{marginTop:20}},
+      React.createElement("h3",{style:{color:"#e2e8f0",fontSize:16,marginBottom:12}},"Lecciones recientes"),
+      CURRICULUM.slice(0,Math.min(5,p.currentDay)).map(l=>
+        React.createElement("button",{key:l.day,style:S.lessonRow,onClick:()=>openLesson(l.day)},
+          React.createElement("div",{style:{display:"flex",alignItems:"center",gap:12}},
+            React.createElement("div",{style:{width:36,height:36,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",background:p.completedLessons.includes(l.day)?"#22c55e":"#334155",fontSize:14,fontWeight:700,color:"#fff"}},p.completedLessons.includes(l.day)?"✓":l.day),
+            React.createElement("div",null,React.createElement("div",{style:{fontWeight:600,fontSize:14,color:"#e2e8f0"}},l.title),React.createElement("div",{style:{fontSize:12,color:"#64748b"}},"Día "+l.day))
+          ),
+          React.createElement("span",{style:{color:"#64748b"}},"→")
+        )
+      )
+    )
+  );
+}
+
+// ═══ LESSON HUB ═══
+function LessonHub({lesson:l, progress:p, setScreen}) {
+  const secs = [
+    {key:"vocab",icon:"📝",label:"Vocabulario",desc:l.vocab.length+" palabras",color:"#3b82f6"},
+    {key:"grammar",icon:"📐",label:"Gramática",desc:l.grammar.title,color:"#22c55e"},
+    {key:"oral",icon:"🎤",label:"Práctica Oral",desc:l.oral.phrases.length+" frases",color:"#f59e0b"},
+    {key:"reading",icon:"📖",label:"Lectura",desc:"Comprensión lectora",color:"#a855f7"},
+    {key:"ai",icon:"🤖",label:"AI Tutor",desc:"Practicá con IA",color:"#ec4899"},
+  ];
+  return React.createElement("div",{style:S.screen},
+    React.createElement("button",{style:S.backBtn,onClick:()=>setScreen("home")},React.createElement(Icon,{type:"back",size:20})," Inicio"),
+    React.createElement("div",{style:{textAlign:"center",marginBottom:24}},
+      React.createElement("div",{style:{fontSize:14,color:"#f59e0b",fontWeight:600,marginBottom:4}},"DÍA "+l.day),
+      React.createElement("h2",{style:{color:"#f1f5f9",fontSize:22,margin:"0 0 8px"}},l.title),
+      React.createElement("div",{style:S.tipBox},l.tip)
+    ),
+    React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:12}},
+      secs.map(s=>React.createElement("button",{key:s.key,style:{...S.sectionBtn,borderLeft:"4px solid "+s.color},onClick:()=>setScreen(s.key)},
+        React.createElement("span",{style:{fontSize:28}},s.icon),
+        React.createElement("div",{style:{flex:1,textAlign:"left"}},React.createElement("div",{style:{fontWeight:700,fontSize:16,color:"#e2e8f0"}},s.label),React.createElement("div",{style:{fontSize:13,color:"#94a3b8"}},s.desc)),
+        React.createElement("span",{style:{color:"#64748b",fontSize:18}},"→")
+      ))
+    )
+  );
+}
+
+// ═══ VOCAB ═══
+function VocabScreen({lesson:l, addXP, goBack}) {
+  const [idx, setIdx] = useState(0);
+  const [flipped, setFlipped] = useState(false);
+  const [done, setDone] = useState(false);
+  const w = l.vocab[idx];
+  const next = () => { if(idx<l.vocab.length-1){setIdx(idx+1);setFlipped(false)}else{setDone(true);addXP(15)} };
+
+  if(done) return React.createElement("div",{style:S.screen},React.createElement("div",{style:{textAlign:"center",padding:"60px 20px"}},
+    React.createElement("div",{style:{fontSize:60,marginBottom:16}},"🎉"),
+    React.createElement("h2",{style:{color:"#f1f5f9"}},"¡Vocabulario completado!"),
+    React.createElement("p",{style:{color:"#94a3b8"}},"+15 XP"),
+    React.createElement("button",{style:S.primaryBtn,onClick:goBack},"Volver")
+  ));
+
+  return React.createElement("div",{style:S.screen},
+    React.createElement("button",{style:S.backBtn,onClick:goBack},React.createElement(Icon,{type:"back",size:20})," Lección"),
+    React.createElement("h3",{style:{color:"#f59e0b",textAlign:"center",marginBottom:4}},"📝 Vocabulario"),
+    React.createElement("p",{style:{color:"#64748b",textAlign:"center",fontSize:13}},"Palabra "+(idx+1)+" de "+l.vocab.length),
+    React.createElement("div",{style:S.flashcard,onClick:()=>setFlipped(!flipped)},
+      !flipped ?
+        React.createElement("div",{style:{textAlign:"center"}},
+          React.createElement("div",{style:{fontSize:32,fontWeight:700,color:"#f1f5f9",marginBottom:8}},w.en),
+          React.createElement("div",{style:{fontSize:14,color:"#94a3b8",fontFamily:"monospace"}},w.phonetic),
+          React.createElement("button",{style:{...S.smallBtn,marginTop:16},onClick:e=>{e.stopPropagation();speak(w.en)}},React.createElement(Icon,{type:"volume",size:16})," Escuchar"),
+          React.createElement("p",{style:{fontSize:12,color:"#475569",marginTop:20}},"Toca para ver la traducción")
+        ) :
+        React.createElement("div",{style:{textAlign:"center"}},
+          React.createElement("div",{style:{fontSize:24,fontWeight:700,color:"#f59e0b",marginBottom:8}},w.es),
+          React.createElement("div",{style:{fontSize:16,color:"#94a3b8",marginBottom:12}},w.en),
+          React.createElement("div",{style:{fontSize:14,color:"#cbd5e1",fontStyle:"italic",background:"#1e293b",padding:"8px 16px",borderRadius:8}},'"'+w.example+'"'),
+          React.createElement("button",{style:{...S.smallBtn,marginTop:12},onClick:e=>{e.stopPropagation();speak(w.example,0.8)}},React.createElement(Icon,{type:"volume",size:16})," Escuchar ejemplo")
+        )
+    ),
+    React.createElement("button",{style:S.primaryBtn,onClick:next},idx<l.vocab.length-1?"Siguiente palabra →":"✅ Completar vocabulario")
+  );
+}
+
+// ═══ GRAMMAR ═══
+function GrammarScreen({lesson:l, addXP, goBack, completeLesson}) {
+  const [step, setStep] = useState("learn");
+  const [qIdx, setQIdx] = useState(0);
+  const [sel, setSel] = useState(null);
+  const [score, setScore] = useState(0);
+  const g = l.grammar;
+
+  if(step==="learn") return React.createElement("div",{style:S.screen},
+    React.createElement("button",{style:S.backBtn,onClick:goBack},React.createElement(Icon,{type:"back",size:20})," Lección"),
+    React.createElement("h3",{style:{color:"#22c55e",textAlign:"center"}},"📐 "+g.title),
+    React.createElement("div",{style:S.grammarBox},React.createElement("pre",{style:{whiteSpace:"pre-wrap",fontFamily:"'Nunito',sans-serif",fontSize:15,color:"#e2e8f0",lineHeight:1.7,margin:0}},g.explanation)),
+    React.createElement("div",{style:S.tipBox},g.tip),
+    React.createElement("button",{style:S.primaryBtn,onClick:()=>setStep("quiz")},"Practicar con ejercicios →")
+  );
+
+  if(step==="done") return React.createElement("div",{style:S.screen},React.createElement("div",{style:{textAlign:"center",padding:"60px 20px"}},
+    React.createElement("div",{style:{fontSize:60,marginBottom:16}},score===g.exercises.length?"🏆":"👍"),
+    React.createElement("h2",{style:{color:"#f1f5f9"}},score+"/"+g.exercises.length+" correctas"),
+    React.createElement("p",{style:{color:"#94a3b8"}},"+"+(score*10)+" XP"),
+    React.createElement("button",{style:S.primaryBtn,onClick:goBack},"Volver")
+  ));
+
+  const ex = g.exercises[qIdx];
+  return React.createElement("div",{style:S.screen},
+    React.createElement("button",{style:S.backBtn,onClick:goBack},React.createElement(Icon,{type:"back",size:20})," Lección"),
+    React.createElement("h3",{style:{color:"#22c55e",textAlign:"center"}},"Ejercicio "+(qIdx+1)+"/"+g.exercises.length),
+    React.createElement("div",{style:S.quizCard},
+      React.createElement("p",{style:{fontSize:20,color:"#f1f5f9",fontWeight:600,marginBottom:20}},ex.q),
+      ex.options.map((opt,i)=>{
+        let bg="#1e293b",br="#334155";
+        if(sel!==null){if(i===ex.correct){bg="#064e3b";br="#22c55e"}else if(i===sel){bg="#4c0519";br="#ef4444"}}
+        return React.createElement("button",{key:i,style:{...S.optionBtn,background:bg,borderColor:br},onClick:()=>{
+          if(sel!==null)return; setSel(i);
+          if(i===ex.correct){setScore(s=>s+1);addXP(10)}
+          setTimeout(()=>{if(qIdx<g.exercises.length-1){setQIdx(q=>q+1);setSel(null)}else{setStep("done");completeLesson()}},1200);
+        }},opt);
+      })
+    )
+  );
+}
+
+// ═══ ORAL ═══
+function OralScreen({lesson:l, addXP, goBack}) {
+  const [idx, setIdx] = useState(0);
+  const [listening, setListening] = useState(false);
+  const [result, setResult] = useState(null);
+  const [done, setDone] = useState(false);
+  const ph = l.oral.phrases[idx];
+
+  const startListen = () => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if(!SR){setResult({text:"⚠️ Navegador sin soporte de voz. Usá Chrome.",score:0});return}
+    const r = new SR(); r.lang="en-US"; r.interimResults=false; r.maxAlternatives=1;
+    r.onstart=()=>setListening(true); r.onend=()=>setListening(false);
+    r.onerror=()=>{setListening(false);setResult({text:"No te escuché. Intentá de nuevo.",score:0})};
+    r.onresult=(e)=>{
+      const spoken=e.results[0][0].transcript.toLowerCase().trim();
+      const target=ph.text.toLowerCase().trim().split(" ");
+      const sw=spoken.split(" ");
+      let m=0; target.forEach(w=>{if(sw.includes(w))m++});
+      const sc=Math.round((m/target.length)*100);
+      setResult({text:spoken,score:sc}); if(sc>=70)addXP(5);
+    };
+    r.start();
+  };
+  const next = () => {if(idx<l.oral.phrases.length-1){setIdx(idx+1);setResult(null)}else{setDone(true);addXP(20)}};
+
+  if(done) return React.createElement("div",{style:S.screen},React.createElement("div",{style:{textAlign:"center",padding:"60px 20px"}},
+    React.createElement("div",{style:{fontSize:60,marginBottom:16}},"🎤"),
+    React.createElement("h2",{style:{color:"#f1f5f9"}},"¡Práctica oral completada!"),
+    React.createElement("p",{style:{color:"#94a3b8"}},"+20 XP"),
+    React.createElement("button",{style:S.primaryBtn,onClick:goBack},"Volver")
+  ));
+
+  return React.createElement("div",{style:S.screen},
+    React.createElement("button",{style:S.backBtn,onClick:goBack},React.createElement(Icon,{type:"back",size:20})," Lección"),
+    React.createElement("h3",{style:{color:"#f59e0b",textAlign:"center"}},"🎤 Práctica Oral"),
+    React.createElement("p",{style:{color:"#64748b",textAlign:"center",fontSize:13}},"Frase "+(idx+1)+" de "+l.oral.phrases.length),
+    React.createElement("div",{style:S.oralCard},
+      React.createElement("p",{style:{fontSize:12,color:"#64748b",marginBottom:4}},"Decí esta frase en inglés:"),
+      React.createElement("p",{style:{fontSize:22,fontWeight:700,color:"#f1f5f9",marginBottom:4}},ph.text),
+      React.createElement("p",{style:{fontSize:14,color:"#94a3b8",fontStyle:"italic"}},ph.translation),
+      React.createElement("button",{style:{...S.smallBtn,marginTop:12},onClick:()=>speak(ph.text,0.75)},React.createElement(Icon,{type:"volume",size:16})," Escuchar primero")
+    ),
+    React.createElement("button",{style:{...S.micBtn,background:listening?"#ef4444":"linear-gradient(135deg,#f59e0b,#d97706)"},onClick:startListen,disabled:listening},
+      React.createElement(Icon,{type:"mic",size:28}),
+      React.createElement("span",null,listening?"Escuchando...":"Tocá y hablá")
+    ),
+    result && React.createElement("div",{style:{...S.resultCard,borderColor:result.score>=70?"#22c55e":result.score>=40?"#f59e0b":"#ef4444"}},
+      React.createElement("div",{style:{display:"flex",justifyContent:"space-between",marginBottom:8}},
+        React.createElement("span",{style:{fontWeight:700,color:"#e2e8f0"}},"Tu pronunciación:"),
+        React.createElement("span",{style:{fontWeight:700,color:result.score>=70?"#22c55e":result.score>=40?"#f59e0b":"#ef4444"}},result.score+"%")
+      ),
+      React.createElement("p",{style:{color:"#cbd5e1",fontSize:14}},'"'+result.text+'"'),
+      result.score>=70 && React.createElement("p",{style:{color:"#22c55e",fontSize:13,marginTop:8}},"🎉 ¡Excelente! +5 XP"),
+      result.score<70 && result.score>=40 && React.createElement("p",{style:{color:"#f59e0b",fontSize:13,marginTop:8}},"👍 Casi... ¡Intentá de nuevo!"),
+      result.score<40 && React.createElement("p",{style:{color:"#ef4444",fontSize:13,marginTop:8}},"💪 Escuchá el audio y volvé a intentar")
+    ),
+    React.createElement("button",{style:S.primaryBtn,onClick:next},idx<l.oral.phrases.length-1?"Siguiente frase →":"✅ Completar")
+  );
+}
+
+// ═══ READING ═══
+function ReadingScreen({lesson:l, addXP, goBack}) {
+  const [step, setStep] = useState("read");
+  const [qIdx, setQIdx] = useState(0);
+  const [sel, setSel] = useState(null);
+  const [score, setScore] = useState(0);
+  const r = l.reading;
+
+  if(step==="read") return React.createElement("div",{style:S.screen},
+    React.createElement("button",{style:S.backBtn,onClick:goBack},React.createElement(Icon,{type:"back",size:20})," Lección"),
+    React.createElement("h3",{style:{color:"#a855f7",textAlign:"center"}},"📖 Lectura"),
+    React.createElement("div",{style:S.readingBox},
+      React.createElement("p",{style:{fontSize:17,lineHeight:1.8,color:"#e2e8f0"}},r.text),
+      React.createElement("button",{style:{...S.smallBtn,marginTop:12},onClick:()=>speak(r.text,0.8)},React.createElement(Icon,{type:"volume",size:16})," Escuchar")
+    ),
+    r.questions.length>0 ?
+      React.createElement("button",{style:S.primaryBtn,onClick:()=>setStep("quiz")},"Responder preguntas →") :
+      React.createElement("button",{style:S.primaryBtn,onClick:goBack},"Volver")
+  );
+
+  if(step==="done") return React.createElement("div",{style:S.screen},React.createElement("div",{style:{textAlign:"center",padding:"60px 20px"}},
+    React.createElement("div",{style:{fontSize:60,marginBottom:16}},"📖"),
+    React.createElement("h2",{style:{color:"#f1f5f9"}},score+"/"+r.questions.length+" correctas"),
+    React.createElement("button",{style:S.primaryBtn,onClick:goBack},"Volver")
+  ));
+
+  const q = r.questions[qIdx];
+  return React.createElement("div",{style:S.screen},
+    React.createElement("h3",{style:{color:"#a855f7",textAlign:"center"}},"Pregunta "+(qIdx+1)+"/"+r.questions.length),
+    React.createElement("div",{style:S.quizCard},
+      React.createElement("p",{style:{fontSize:18,color:"#f1f5f9",fontWeight:600,marginBottom:20}},q.q),
+      q.options.map((opt,i)=>{
+        let bg="#1e293b",br="#334155";
+        if(sel!==null){if(i===q.correct){bg="#064e3b";br="#22c55e"}else if(i===sel){bg="#4c0519";br="#ef4444"}}
+        return React.createElement("button",{key:i,style:{...S.optionBtn,background:bg,borderColor:br},onClick:()=>{
+          if(sel!==null)return; setSel(i); if(i===q.correct){setScore(s=>s+1);addXP(10)}
+          setTimeout(()=>{if(qIdx<r.questions.length-1){setQIdx(q=>q+1);setSel(null)}else setStep("done")},1000);
+        }},opt);
+      })
+    )
+  );
+}
+
+// ═══ AI TUTOR ═══
+function AITutor({goBack, progress:p, setProgress, addXP, ctx}) {
+  const [msgs, setMsgs] = useState([]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [mode, setMode] = useState(null);
+  const endRef = useRef(null);
+  useEffect(()=>{endRef.current?.scrollIntoView({behavior:"smooth"})},[msgs]);
+
+  const sys = "You are SpeakUp!'s friendly English tutor. Student: Brian from Argentina, beginner-elementary level, Day "+p.currentDay+"/180. RULES: Speak in SIMPLE English. Short sentences. After every English sentence, add Spanish translation in parentheses. Be encouraging. Correct mistakes gently. "+(ctx?"Current topic: "+ctx.title+". ":"")+"Keep responses SHORT (2-4 sentences). Use emojis occasionally.";
+
+  const send = async (text) => {
+    if(!text.trim()) return;
+    const um = {role:"user",content:text};
+    const nm = [...msgs, um]; setMsgs(nm); setInput(""); setLoading(true);
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages",{
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system:sys,messages:nm.map(m=>({role:m.role,content:m.content}))})
+      });
+      const data = await res.json();
+      const reply = data.content?.map(c=>c.text||"").join("") || "Sorry, try again!";
+      setMsgs(prev=>[...prev,{role:"assistant",content:reply}]); addXP(3);
+    } catch(e) { setMsgs(prev=>[...prev,{role:"assistant",content:"⚠️ Error. Intentá de nuevo."}]); }
+    setLoading(false);
+  };
+
+  if(!mode) return React.createElement("div",{style:S.screen},
+    React.createElement("button",{style:S.backBtn,onClick:goBack},React.createElement(Icon,{type:"back",size:20})," Volver"),
+    React.createElement("div",{style:{textAlign:"center",marginBottom:24}},
+      React.createElement("div",{style:{fontSize:48,marginBottom:12}},"🤖"),
+      React.createElement("h2",{style:{color:"#f1f5f9",margin:"0 0 8px"}},"AI Tutor"),
+      React.createElement("p",{style:{color:"#94a3b8",fontSize:14}},"Tu profesor personal con IA")
+    ),
+    React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:12}},
+      [{k:"chat",icon:"💬",label:"Conversación libre",desc:"Charlá en inglés",color:"#3b82f6",msg:"Hi! Let's have a casual conversation. Start by asking me something simple about my day."},
+       {k:"practice",icon:"🎭",label:"Situación real",desc:"Practicá escenarios reales",color:"#f59e0b",msg:"Let's practice a real-life situation! Give me a scenario like ordering food at a restaurant."},
+       {k:"explain",icon:"📚",label:"Explicar gramática",desc:ctx?"Tema: "+ctx.grammar.title:"Pedí cualquier tema",color:"#a855f7",msg:ctx?"Please explain: "+ctx.grammar.title+" in a simple way with examples.":"Explain Present Simple vs Present Continuous with simple examples."}
+      ].map(s=>React.createElement("button",{key:s.k,style:{...S.sectionBtn,borderLeft:"4px solid "+s.color},onClick:()=>{setMode(s.k);send(s.msg)}},
+        React.createElement("span",{style:{fontSize:28}},s.icon),
+        React.createElement("div",{style:{flex:1,textAlign:"left"}},React.createElement("div",{style:{fontWeight:700,color:"#e2e8f0"}},s.label),React.createElement("div",{style:{fontSize:13,color:"#94a3b8"}},s.desc))
+      ))
+    )
+  );
+
+  return React.createElement("div",{style:{...S.screen,display:"flex",flexDirection:"column",height:"100vh",padding:0}},
+    React.createElement("div",{style:{padding:"12px 16px",borderBottom:"1px solid #1e293b",display:"flex",alignItems:"center",gap:12,background:"#0f172a"}},
+      React.createElement("button",{style:{...S.backBtn,margin:0,padding:4},onClick:()=>{setMode(null);setMsgs([])}},React.createElement(Icon,{type:"back",size:20})),
+      React.createElement("div",null,React.createElement("span",{style:{fontWeight:700,color:"#f1f5f9"}},"🤖 AI Tutor"),React.createElement("span",{style:{fontSize:12,color:"#22c55e",marginLeft:8}},"● online"))
+    ),
+    React.createElement("div",{style:{flex:1,overflowY:"auto",padding:16,display:"flex",flexDirection:"column",gap:12}},
+      msgs.map((m,i)=>React.createElement("div",{key:i,style:{alignSelf:m.role==="user"?"flex-end":"flex-start",maxWidth:"85%",padding:"10px 14px",borderRadius:16,background:m.role==="user"?"#3b82f6":"#1e293b",color:"#f1f5f9",fontSize:15,lineHeight:1.6,borderBottomRightRadius:m.role==="user"?4:16,borderBottomLeftRadius:m.role==="assistant"?4:16,whiteSpace:"pre-wrap"}},
+        m.content,
+        m.role==="assistant" && React.createElement("button",{style:{display:"block",marginTop:6,background:"none",border:"none",color:"#64748b",fontSize:12,cursor:"pointer",padding:0},onClick:()=>speak(m.content.replace(/\(.*?\)/g,""),0.85)},"🔊 Escuchar")
+      )),
+      loading && React.createElement("div",{style:{alignSelf:"flex-start",padding:"10px 14px",borderRadius:16,background:"#1e293b",color:"#94a3b8"}},"Pensando..."),
+      React.createElement("div",{ref:endRef})
+    ),
+    React.createElement("div",{style:{padding:"12px 16px",borderTop:"1px solid #1e293b",display:"flex",gap:8,background:"#0f172a"}},
+      React.createElement("input",{style:S.chatInput,value:input,onChange:e=>setInput(e.target.value),onKeyDown:e=>e.key==="Enter"&&send(input),placeholder:"Escribí en inglés o español..."}),
+      React.createElement("button",{style:S.sendBtn,onClick:()=>send(input),disabled:loading},"➤")
+    )
+  );
+}
+
+// ═══ BADGES ═══
+function BadgesScreen({progress:p, goBack}) {
+  return React.createElement("div",{style:S.screen},
+    React.createElement("button",{style:S.backBtn,onClick:goBack},React.createElement(Icon,{type:"back",size:20})," Inicio"),
+    React.createElement("h2",{style:{color:"#f1f5f9",textAlign:"center"}},"🏆 Logros"),
+    React.createElement("p",{style:{color:"#94a3b8",textAlign:"center",marginBottom:24}},p.badges.length+"/"+BADGES.length+" desbloqueados"),
+    React.createElement("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}},
+      BADGES.map(b=>{
+        const u=p.badges.includes(b.id);
+        return React.createElement("div",{key:b.id,style:{background:u?"#1e293b":"#0f172a",border:"1px solid "+(u?"#f59e0b":"#1e293b"),borderRadius:16,padding:16,textAlign:"center",opacity:u?1:0.4}},
+          React.createElement("div",{style:{fontSize:36,marginBottom:8}},b.emoji),
+          React.createElement("div",{style:{fontWeight:700,fontSize:14,color:u?"#f59e0b":"#475569"}},b.name),
+          React.createElement("div",{style:{fontSize:12,color:"#64748b",marginTop:4}},b.desc)
+        );
+      })
+    )
+  );
+}
+
+// ═══ DAY MAP ═══
+function DayMap({progress:p, openLesson, goBack}) {
+  return React.createElement("div",{style:S.screen},
+    React.createElement("button",{style:S.backBtn,onClick:goBack},React.createElement(Icon,{type:"back",size:20})," Inicio"),
+    React.createElement("h2",{style:{color:"#f1f5f9",textAlign:"center"}},"🗺️ Mapa de 180 Días"),
+    LEVELS.map((lv,li)=>React.createElement("div",{key:li,style:{marginBottom:24}},
+      React.createElement("h3",{style:{color:lv.color,fontSize:16,marginBottom:12}},lv.emoji+" "+lv.name+" (Días "+lv.days[0]+"-"+lv.days[1]+")"),
+      React.createElement("div",{style:{display:"flex",flexWrap:"wrap",gap:8}},
+        Array.from({length:lv.days[1]-lv.days[0]+1},(_,i)=>{
+          const d=lv.days[0]+i, comp=p.completedLessons.includes(d), cur=d===p.currentDay, lock=d>p.currentDay;
+          return React.createElement("button",{key:d,style:{width:40,height:40,borderRadius:"50%",border:"none",cursor:lock?"default":"pointer",fontSize:12,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",background:comp?lv.color:cur?"#f59e0b":lock?"#1e293b":"#334155",color:lock?"#475569":"#fff",boxShadow:cur?"0 0 12px rgba(245,158,11,0.5)":"none",opacity:lock?.5:1},onClick:()=>!lock&&openLesson(d)},comp?"✓":d);
+        })
+      )
+    ))
+  );
+}
+
+// ═══ STYLES ═══
+const S = {
+  app:{fontFamily:"'Nunito','Fredoka',system-ui,sans-serif",background:"#0a0e1a",minHeight:"100vh",maxWidth:480,margin:"0 auto",position:"relative"},
+  screen:{padding:"16px 16px 100px"},
+  toast:{position:"fixed",top:20,left:"50%",transform:"translateX(-50%)",zIndex:1000,background:"linear-gradient(135deg,#f59e0b,#d97706)",color:"#fff",padding:"10px 24px",borderRadius:24,fontWeight:700,fontSize:15,boxShadow:"0 8px 24px rgba(245,158,11,0.3)",animation:"slideDown .3s ease"},
+  homeHeader:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,paddingTop:8},
+  logo:{fontFamily:"'Fredoka',sans-serif",fontSize:26,color:"#f59e0b",margin:0,textShadow:"0 2px 12px rgba(245,158,11,0.3)"},
+  subtitle:{color:"#94a3b8",fontSize:13,margin:"4px 0 0"},
+  streakBadge:{background:"linear-gradient(135deg,#dc2626,#f59e0b)",borderRadius:20,padding:"6px 14px",fontWeight:800,fontSize:16,color:"#fff"},
+  levelCard:{background:"#111827",border:"1px solid #1e293b",borderRadius:16,padding:16,marginBottom:16},
+  progressBarBg:{height:10,borderRadius:5,background:"#1e293b",overflow:"hidden"},
+  progressBarFill:{height:"100%",borderRadius:5,transition:"width .5s ease"},
+  todayCTA:{width:"100%",background:"linear-gradient(135deg,#f59e0b,#d97706)",border:"none",borderRadius:20,padding:"20px 16px",color:"#fff",cursor:"pointer",textAlign:"center",boxShadow:"0 8px 32px rgba(245,158,11,0.25)",marginBottom:16},
+  quickGrid:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10},
+  quickBtn:{border:"none",borderRadius:16,padding:"16px 8px",color:"#fff",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:6},
+  lessonRow:{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",background:"#111827",border:"1px solid #1e293b",borderRadius:12,padding:"12px 16px",cursor:"pointer",marginBottom:8,color:"#fff"},
+  backBtn:{background:"none",border:"none",color:"#94a3b8",cursor:"pointer",display:"flex",alignItems:"center",gap:4,fontSize:14,padding:"8px 0",marginBottom:12},
+  tipBox:{background:"#1a1a2e",border:"1px solid #2d2d44",borderRadius:12,padding:14,fontSize:14,color:"#fbbf24",lineHeight:1.6,marginBottom:16},
+  sectionBtn:{display:"flex",alignItems:"center",gap:14,width:"100%",background:"#111827",border:"1px solid #1e293b",borderRadius:14,padding:"16px",cursor:"pointer",color:"#fff"},
+  flashcard:{background:"linear-gradient(145deg,#111827,#1e293b)",border:"1px solid #334155",borderRadius:20,padding:"40px 24px",marginBottom:16,cursor:"pointer",minHeight:200,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 8px 32px rgba(0,0,0,0.3)"},
+  smallBtn:{background:"#1e293b",border:"1px solid #334155",borderRadius:20,padding:"6px 14px",color:"#94a3b8",cursor:"pointer",fontSize:13,display:"inline-flex",alignItems:"center",gap:6},
+  primaryBtn:{width:"100%",background:"linear-gradient(135deg,#f59e0b,#d97706)",border:"none",borderRadius:14,padding:"14px",color:"#fff",fontWeight:700,fontSize:16,cursor:"pointer",marginTop:12,boxShadow:"0 4px 16px rgba(245,158,11,0.25)"},
+  grammarBox:{background:"#111827",border:"1px solid #1e293b",borderRadius:16,padding:20,marginBottom:16},
+  quizCard:{background:"#111827",border:"1px solid #1e293b",borderRadius:20,padding:24},
+  optionBtn:{width:"100%",padding:"14px 16px",borderRadius:12,border:"2px solid #334155",color:"#e2e8f0",fontSize:16,cursor:"pointer",marginBottom:10,textAlign:"left",fontWeight:600,transition:"all .3s ease",background:"#1e293b"},
+  oralCard:{background:"#111827",border:"1px solid #1e293b",borderRadius:20,padding:24,textAlign:"center",marginBottom:16},
+  micBtn:{width:"100%",border:"none",borderRadius:20,padding:"18px",color:"#fff",fontWeight:700,fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:12,marginBottom:16,boxShadow:"0 8px 24px rgba(245,158,11,0.3)"},
+  resultCard:{background:"#111827",border:"2px solid",borderRadius:16,padding:16,marginBottom:16},
+  readingBox:{background:"#111827",border:"1px solid #1e293b",borderRadius:16,padding:20,marginBottom:16},
+  chatInput:{flex:1,background:"#1e293b",border:"1px solid #334155",borderRadius:24,padding:"10px 16px",color:"#f1f5f9",fontSize:15,outline:"none"},
+  sendBtn:{background:"linear-gradient(135deg,#3b82f6,#2563eb)",border:"none",borderRadius:"50%",width:44,height:44,color:"#fff",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"},
+};
+
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
+</script>
+</body>
+</html>

@@ -736,21 +736,39 @@ function OralScreen({lesson:l, addXP, goBack}) {
   const [done, setDone] = useState(false);
   const ph = l.oral.phrases[idx];
 
-  const startListen = () => {
+  const startListen = async () => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if(!SR){setResult({text:"⚠️ Navegador sin soporte de voz. Usá Chrome.",score:0});return}
-    const r = new SR(); r.lang="en-US"; r.interimResults=false; r.maxAlternatives=1;
-    r.onstart=()=>setListening(true); r.onend=()=>setListening(false);
-    r.onerror=()=>{setListening(false);setResult({text:"No te escuché. Intentá de nuevo.",score:0})};
-    r.onresult=(e)=>{
-      const spoken=e.results[0][0].transcript.toLowerCase().trim();
-      const target=ph.text.toLowerCase().trim().split(" ");
-      const sw=spoken.split(" ");
-      let m=0; target.forEach(w=>{if(sw.includes(w))m++});
-      const sc=Math.round((m/target.length)*100);
-      setResult({text:spoken,score:sc}); if(sc>=70)addXP(5);
-    };
-    r.start();
+    if(!SR){setResult({text:"⚠️ Tu navegador no soporta reconocimiento de voz. Abrí esta página en Chrome.",score:0});return}
+    // Request mic permission explicitly first
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+      stream.getTracks().forEach(t=>t.stop()); // release immediately, we just needed permission
+    } catch(err) {
+      setResult({text:"⚠️ Necesito permiso para usar el micrófono. Tocá el candadito 🔒 en la barra de URL → Micrófono → Permitir. Luego recargá la página.",score:0});
+      return;
+    }
+    try {
+      const r = new SR(); r.lang="en-US"; r.interimResults=false; r.maxAlternatives=1; r.continuous=false;
+      r.onstart=()=>setListening(true);
+      r.onend=()=>setListening(false);
+      r.onerror=(ev)=>{
+        setListening(false);
+        if(ev.error==="not-allowed") setResult({text:"⚠️ Micrófono bloqueado. Tocá el candadito 🔒 arriba → Micrófono → Permitir.",score:0});
+        else if(ev.error==="no-speech") setResult({text:"🤔 No escuché nada. Hablá más fuerte y cerca del micrófono.",score:0});
+        else setResult({text:"⚠️ Error: "+ev.error+". Intentá de nuevo.",score:0});
+      };
+      r.onresult=(e)=>{
+        const spoken=e.results[0][0].transcript.toLowerCase().trim();
+        const target=ph.text.toLowerCase().trim().split(" ");
+        const sw=spoken.split(" ");
+        let m=0; target.forEach(w=>{if(sw.includes(w))m++});
+        const sc=Math.round((m/target.length)*100);
+        setResult({text:spoken,score:sc}); if(sc>=70)addXP(5);
+      };
+      r.start();
+    } catch(err) {
+      setResult({text:"⚠️ Error al iniciar el reconocimiento de voz: "+err.message,score:0});
+    }
   };
   const next = () => {if(idx<l.oral.phrases.length-1){setIdx(idx+1);setResult(null)}else{setDone(true);addXP(20)}};
 

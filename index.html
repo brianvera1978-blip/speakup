@@ -856,10 +856,25 @@ function AITutor({goBack, progress:p, setProgress, addXP, ctx}) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState(null);
+  const [apiKey, setApiKey] = useState(()=>{ try{return localStorage.getItem("speakup-apikey")||""}catch{return ""} });
+  const [keyInput, setKeyInput] = useState("");
+  const [keyError, setKeyError] = useState("");
   const endRef = useRef(null);
   useEffect(()=>{endRef.current?.scrollIntoView({behavior:"smooth"})},[msgs]);
 
   const sys = "You are SpeakUp!'s friendly English tutor. Student: Brian from Argentina, beginner-elementary level, Day "+p.currentDay+"/180. RULES: Speak in SIMPLE English. Short sentences. After every English sentence, add Spanish translation in parentheses. Be encouraging. Correct mistakes gently. "+(ctx?"Current topic: "+ctx.title+". ":"")+"Keep responses SHORT (2-4 sentences). Use emojis occasionally.";
+
+  const saveKey = () => {
+    const k = keyInput.trim();
+    if(!k.startsWith("sk-ant-")){setKeyError("La API key debe empezar con 'sk-ant-'. Revisá que la copiaste bien.");return}
+    try{localStorage.setItem("speakup-apikey",k)}catch{}
+    setApiKey(k); setKeyError("");
+  };
+
+  const clearKey = () => {
+    try{localStorage.removeItem("speakup-apikey")}catch{}
+    setApiKey(""); setKeyInput(""); setMode(null); setMsgs([]);
+  };
 
   const send = async (text) => {
     if(!text.trim()) return;
@@ -867,22 +882,48 @@ function AITutor({goBack, progress:p, setProgress, addXP, ctx}) {
     const nm = [...msgs, um]; setMsgs(nm); setInput(""); setLoading(true);
     try {
       const res = await fetch("https://api.anthropic.com/v1/messages",{
-        method:"POST", headers:{"Content-Type":"application/json"},
+        method:"POST", headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
         body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system:sys,messages:nm.map(m=>({role:m.role,content:m.content}))})
       });
+      if(!res.ok){
+        const err = await res.json().catch(()=>({}));
+        if(res.status===401){setMsgs(prev=>[...prev,{role:"assistant",content:"⚠️ API key inválida. Tocá 'Cambiar API Key' abajo y revisá que esté bien copiada."}]); setLoading(false); return;}
+        setMsgs(prev=>[...prev,{role:"assistant",content:"⚠️ Error "+(err.error?.message||res.status)+". Intentá de nuevo."}]); setLoading(false); return;
+      }
       const data = await res.json();
       const reply = data.content?.map(c=>c.text||"").join("") || "Sorry, try again!";
       setMsgs(prev=>[...prev,{role:"assistant",content:reply}]); addXP(3);
-    } catch(e) { setMsgs(prev=>[...prev,{role:"assistant",content:"⚠️ Error. Intentá de nuevo."}]); }
+    } catch(e) { setMsgs(prev=>[...prev,{role:"assistant",content:"⚠️ Error de conexión. Verificá tu internet e intentá de nuevo."}]); }
     setLoading(false);
   };
 
+  // API KEY INPUT SCREEN
+  if(!apiKey) return React.createElement("div",{style:S.screen},
+    React.createElement("button",{style:S.backBtn,onClick:goBack},React.createElement(Icon,{type:"back",size:20})," Volver"),
+    React.createElement("div",{style:{textAlign:"center",marginBottom:24}},
+      React.createElement("div",{style:{fontSize:48,marginBottom:12}},"🔑"),
+      React.createElement("h2",{style:{color:"#f1f5f9",margin:"0 0 8px"}},"Configurar AI Tutor"),
+      React.createElement("p",{style:{color:"#94a3b8",fontSize:14,lineHeight:1.6}},"Para usar el AI Tutor necesitás tu API key de Anthropic. Se guarda SOLO en tu celular, nadie más puede verla.")
+    ),
+    React.createElement("div",{style:{marginBottom:16}},
+      React.createElement("p",{style:{color:"#64748b",fontSize:13,marginBottom:8}},"Pegá tu API key acá:"),
+      React.createElement("input",{style:{...S.chatInput,width:"100%",marginBottom:8,padding:"14px 16px"},value:keyInput,onChange:e=>setKeyInput(e.target.value),placeholder:"sk-ant-api03-...",type:"password"}),
+      keyError && React.createElement("p",{style:{color:"#ef4444",fontSize:13,marginBottom:8}},keyError),
+      React.createElement("button",{style:S.primaryBtn,onClick:saveKey},"✅ Guardar y empezar")
+    ),
+    React.createElement("div",{style:{...S.tipBox,marginTop:16}},
+      "💡 ¿Dónde encuentro mi API key?\n\n1. Entrá a console.anthropic.com\n2. Andá a 'API Keys'\n3. Creá una nueva o copiá una existente\n4. Empieza con 'sk-ant-...'"
+    )
+  );
+
+  // MODE SELECT SCREEN
   if(!mode) return React.createElement("div",{style:S.screen},
     React.createElement("button",{style:S.backBtn,onClick:goBack},React.createElement(Icon,{type:"back",size:20})," Volver"),
     React.createElement("div",{style:{textAlign:"center",marginBottom:24}},
       React.createElement("div",{style:{fontSize:48,marginBottom:12}},"🤖"),
       React.createElement("h2",{style:{color:"#f1f5f9",margin:"0 0 8px"}},"AI Tutor"),
-      React.createElement("p",{style:{color:"#94a3b8",fontSize:14}},"Tu profesor personal con IA")
+      React.createElement("p",{style:{color:"#94a3b8",fontSize:14}},"Tu profesor personal con IA"),
+      React.createElement("p",{style:{color:"#22c55e",fontSize:12,marginTop:4}},"✅ API key configurada")
     ),
     React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:12}},
       [{k:"chat",icon:"💬",label:"Conversación libre",desc:"Charlá en inglés",color:"#3b82f6",msg:"Hi! Let's have a casual conversation. Start by asking me something simple about my day."},
@@ -892,13 +933,16 @@ function AITutor({goBack, progress:p, setProgress, addXP, ctx}) {
         React.createElement("span",{style:{fontSize:28}},s.icon),
         React.createElement("div",{style:{flex:1,textAlign:"left"}},React.createElement("div",{style:{fontWeight:700,color:"#e2e8f0"}},s.label),React.createElement("div",{style:{fontSize:13,color:"#94a3b8"}},s.desc))
       ))
-    )
+    ),
+    React.createElement("button",{style:{...S.smallBtn,marginTop:24,width:"100%",justifyContent:"center"},onClick:clearKey},"🔑 Cambiar API Key")
   );
 
+  // CHAT SCREEN
   return React.createElement("div",{style:{...S.screen,display:"flex",flexDirection:"column",height:"100vh",padding:0}},
     React.createElement("div",{style:{padding:"12px 16px",borderBottom:"1px solid #1e293b",display:"flex",alignItems:"center",gap:12,background:"#0f172a"}},
       React.createElement("button",{style:{...S.backBtn,margin:0,padding:4},onClick:()=>{setMode(null);setMsgs([])}},React.createElement(Icon,{type:"back",size:20})),
-      React.createElement("div",null,React.createElement("span",{style:{fontWeight:700,color:"#f1f5f9"}},"🤖 AI Tutor"),React.createElement("span",{style:{fontSize:12,color:"#22c55e",marginLeft:8}},"● online"))
+      React.createElement("div",{style:{flex:1}},React.createElement("span",{style:{fontWeight:700,color:"#f1f5f9"}},"🤖 AI Tutor"),React.createElement("span",{style:{fontSize:12,color:"#22c55e",marginLeft:8}},"● online")),
+      React.createElement("button",{style:{background:"none",border:"none",color:"#64748b",fontSize:11,cursor:"pointer"},onClick:clearKey},"🔑")
     ),
     React.createElement("div",{style:{flex:1,overflowY:"auto",padding:16,display:"flex",flexDirection:"column",gap:12}},
       msgs.map((m,i)=>React.createElement("div",{key:i,style:{alignSelf:m.role==="user"?"flex-end":"flex-start",maxWidth:"85%",padding:"10px 14px",borderRadius:16,background:m.role==="user"?"#3b82f6":"#1e293b",color:"#f1f5f9",fontSize:15,lineHeight:1.6,borderBottomRightRadius:m.role==="user"?4:16,borderBottomLeftRadius:m.role==="assistant"?4:16,whiteSpace:"pre-wrap"}},
